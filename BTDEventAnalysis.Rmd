@@ -1,0 +1,206 @@
+---
+title: "BTD Event Analysis"
+author: "Adrienne E. Faerber"
+date: "1/9/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+Event Analysis of stock data for key pharmaceutical companies
+Addi Faerber, 2018
+
+Data is Breakthrough Therapy spreadsheet on Google Drive: 
+1anzFAEoavV9ET1EdNhiu2NZElxHOKfFkG0Vz4qXHfqI
+
+```{r Library and script calls}
+library(tidyverse)
+library(lubridate)
+library(quantmod)
+library(tidyquant)
+
+source("scripts/functions.R")
+
+```
+
+
+#Event Analysis 
+
+Event analysis allows analysis of stock values to determine if exogenous events have effects on the stock price for given companies. The analysis technique allows to adjust for returns to the general market, and returns to a specific industry of the market. 
+
+In this analysis, I will be using event analysis to examine if breakthrough therapy designations have an effect on stock prices for pharmaceutical companies. I hypothesize three things:   
+- Breakthrough therapy designations will be associated with increased abnormal returns for the pharmaceutical company receiving the breakthrough therapy designation.   
+- Breakthrough therapy designations will have a decreased abnormal return for pharmaceutical companies that also have competing products in their approval pipeline.   
+- These abnormal returns will be lower than the abnormal return from the FDA approval of the breakthrough therapy drug.
+
+
+Event Analysis has 5 key steps: 
+
+1. Calculate returns to the market and to the target stock. 
+2. Estimate a linear model for returns to the stock regressed to the market. 
+3. Estimate abnormal and cumulative abnormal returns to the stock. 
+4. Evaluate statistically significant abnormal returns during the event period. 
+5. Assess the model sensitivity by varying the analysis and event windows. 
+
+# Building the analytic dataset
+
+To conduct event analysis, we need two key pieces of information, the stock ticker symbol, and the date of the Breakthrough Therapy Designation. These data are found in the BTD Google Spreadsheet: [https://docs.google.com/spreadsheets/d/18rneVijVq1L1k0m6i0kcC7H_Knp5OV2KPwI7AHWI-1g/edit#gid=0]
+
+## Pull Breakthrough therapy drug data
+
+```{r pull data, cache = TRUE}
+
+drugs <- getGoogleSpreadsheet()
+
+```
+
+
+```{r}
+stocks <- drugs %>% 
+  select(BTDdate, approvDate, drugName, ticker, company, approved, combo)
+```
+
+Target breakthrough therapy designations for analysis will be:   
+- is received by a publicly traded company with a valid stock ticker symbol. (exclude "private" and "Private" tickers)
+- must be received before July 1, 2017 (the analysis window).
+- awarded to a single drug manufactured by one pharmaceutical manufacturer. This will exclude combination drugs and joint agreements developed by multiple pharmaceutical manufacturers. 
+
+```{r}
+stocks <- stocks %>% 
+  filter(!is.na(ticker) & 
+           BTDdate <= as.Date("2017-07-01") & 
+           ticker != "private" & 
+           ticker != "Private" &
+           combo == FALSE)
+```
+
+Other breakthrough therapy designations that will be removed include: 
+- Duplicate BTDs for the same drug. Only the first BTD will be considered in the analysis. Within each drug name, this picks the first item, based on sort of breakthrough therapy dates. This means the earliest BTD for a given drug is the one chosen for analysis. 
+
+```{r}
+stocks <-  stocks %>% 
+  group_by(drugName) %>% 
+  top_n(1, BTDdate)  
+  
+```
+
+- Breakthrough Therapy Designations that are recieved within 60 days of a previous breakthrough therapy designation for the same pharmaceutical company. 
+
+```{r}
+stocks <- stocks %>% 
+  group_by(ticker) %>% 
+  arrange(BTDdate, .by_group = TRUE) %>% 
+  mutate(diff = as.integer(lag(BTDdate, 1 ) - BTDdate )) %>% #calculate the days between the current BTD and the previous BTD
+  filter(abs(diff) >= 60 | is.na(diff)) %>% #exclude BTDs that happned less than 60 days after the previous BTD for the company 
+  select(-diff)
+```
+
+Define the event analysis period for each BTD. I will be using a 300-day trading window to establish the event period. 
+
+```{r}
+stocks <- stocks %>% 
+  mutate(EvaluationStart = as.Date(BTDdate - days(300))) %>% 
+  mutate(EvaluationEnd = as.Date(BTDdate - days(3))) %>% 
+  mutate(EventStart = as.Date(BTDdate - days(2))) %>% 
+  mutate(EventEnd = as.Date(BTDdate + days(2)))
+```
+
+## Building Stock Dataset 
+
+I need to pull stock data from the web for the target companies. 
+And stock data for the S&P Index as a market benchmark. 
+```{r}
+tmp <- tq_get(stocks$ticker[1:3], from=as.Date("2013-12-01"), to = as.Date("2017-07-01"))
+sp <- tq_get("SPX",  from=as.Date("2013-12-01"), to = as.Date("2017-07-01")) %>% 
+  mutate(symbol="SPX")
+prices <- bind_rows(tmp, sp)
+rm(sp)
+rm(tmp)
+```
+ The plan for building the stock price dataset is to go row-by-row of the stocks data, 
+ filtering the prices dataset multiple times to pull the rows that have closing prices on the given dates in range. Then join this long stock data back to the drugs data, so there will be about 310 rows (300 days in evaluation window, 10 days in event window) for each breakthrough therapy. I also need to add in the closing S&P for each row too. 
+ 
+```{r}
+analysis <- stocks %>% 
+  rowwise() %>% 
+   
+```
+
+
+
+# Event Analysis Step 1: Calculate returns to the market and to the target stock. 
+
+# Event Analysis Step 2. Estimate a linear model for returns to the stock regressed to the market. 
+
+
+# Event Analysis Step 3. Estimate abnormal and cumulative abnormal returns to the stock. 
+
+
+# Event Analysis Step 4. Evaluate statistically significant abnormal returns during the event period. 
+
+
+# Event Analysis Step 5. Assess the model sensitivity by varying the analysis and event windows. 
+
+
+
+<!-- #Hep C Drug Analysis--------------------------------------------------------- -->
+
+<!-- ```{r hep C} -->
+<!-- hepcdrugs <- drugs %>%  -->
+<!--   filter(drugclass == "hepatitis C") -->
+<!-- hepcstocks <- makeStockDataset(hepcdrugs) -->
+<!-- horserace(hepcstocks) -->
+
+<!-- hepcstocksBTD <- calcReturn(hepcstocks, BTDdate, daysFromBTD, window = 120) -->
+<!-- hepcBTDreturns <- returnsTable(hepcstocksBTD, daysFromBTD) -->
+<!-- plotReturns(hepcstocksBTD, daysFromBTD) -->
+<!-- ``` -->
+
+
+
+<!-- #Lung Drugs for ALK+ Cancer Analysis ------------------- -->
+
+<!-- ```{r lung drugs} -->
+<!-- lungdrugs <- drugs %>%  -->
+<!--   filter(drugName %in% c("Zykadia","Alecensa","Tagrisso","Alunbrig","Keytruda","Tecentriq","Xalkori")) %>%  -->
+<!--   filter(drugclass == "lung cancer") -->
+
+<!-- lungstocks <- makeStockDataset(lungdrugs) -->
+<!-- horserace(lungstocks) -->
+
+<!-- lungstocksBTD <- calcReturn(lungstocks, BTDdate, daysFromBTD, window=120) -->
+<!-- lungstocksapprov <- calcReturn(lungstocks, approvDate, daysFromApprov, window=120) -->
+
+<!-- lungBTDreturnsTable <- returnsTable(lungstocksBTD, daysFromBTD) -->
+<!-- lungApprovReturnsTable <- returnsTable(lungstocksapprov, daysFromApprov) -->
+
+<!-- plotReturns(lungstocksBTD, daysFromBTD) -->
+<!-- plotReturns(lungstocksapprov, daysFromApprov) -->
+<!-- ``` -->
+
+<!-- #Analysis of "pure" cases of companies with few drugs and breakthrough therapy designations------------- -->
+
+<!-- ```{r} -->
+
+<!-- pure <- drugs %>%  -->
+<!--   filter(flag == "Yes") -->
+
+<!-- purestocks <- makeStockDataset(pure) -->
+<!-- horserace(purestocks) -->
+<!-- purestocksBTD <- calcReturn(purestocks, BTDdate, daysFromBTD, window = 120) -->
+<!-- returns <- returnsTable(purestocksBTD, daysFromBTD) -->
+<!-- plotReturns(purestocksBTD, daysFromBTD)   -->
+
+<!-- ``` -->
+
+
+
+
+
+
+
+
+
+
